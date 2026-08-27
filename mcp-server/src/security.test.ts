@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { validateReadOnlySql } from "./security.js";
+test("SELECT sorgusunu kabul eder", () => assert.equal(validateReadOnlySql("SELECT * FROM products;"), "SELECT * FROM products"));
+test("WITH sorgusunu kabul eder", () => assert.match(validateReadOnlySql("WITH x AS (SELECT 1) SELECT * FROM x"), /^WITH/));
+test("DELETE sorgusunu reddeder", () => assert.throws(() => validateReadOnlySql("DELETE FROM products")));
+test("çoklu statement reddedilir", () => assert.throws(() => validateReadOnlySql("SELECT 1; SELECT 2")));
+test("yorumla gizlenen sorgu reddedilir", () => assert.throws(() => validateReadOnlySql("SELECT * FROM products -- test")));
+test("sistem kataloğu reddedilir", () => assert.throws(() => validateReadOnlySql("SELECT * FROM pg_catalog.pg_user")));
+test("satır kilidi reddedilir", () => assert.throws(() => validateReadOnlySql("SELECT * FROM products FOR UPDATE")));

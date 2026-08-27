@@ -1,0 +1,34 @@
+MCP VERİ ASİSTANI — v1'DEN v2'YE GÜNCELLEME
+
+1. Backend ve frontend terminallerini kapatın. Docker açık kalabilir.
+
+2. Bu ZIP'in içindekileri mevcut MCP-Veri-Asistani klasörünün içine çıkarın.
+   Windows "aynı adlı dosyalar var" dediğinde "dosyaları değiştir" seçeneğini seçin.
+   Klasör yapısını bozmayın: app, backend, mcp-server ve docs klasörleri yerinde kalmalıdır.
+
+3. VS Code terminalinde proje ana klasöründe çalıştırın:
+
+   npm install
+   npm install --prefix backend
+   npm install --prefix mcp-server
+   npm run build --prefix mcp-server
+
+4. Backend'i başlatın:
+
+   npm run dev --prefix backend
+
+5. Yeni terminalde frontend'i başlatın:
+
+   npm run dev
+
+6. Tarayıcı adresleri:
+
+   Arayüz: http://localhost:3000
+   Swagger: http://localhost:3001/docs
+
+NOTLAR
+
+- Mevcut PostgreSQL verileriniz silinmez.
+- database/init.sql yalnızca sıfırdan oluşturulan veritabanlarında kullanılır.
+- OPENAI_API_KEY zorunlu değildir.
+- Bu paket yalnızca v1'den sonra değişen veya yeni eklenen dosyaları içerir.

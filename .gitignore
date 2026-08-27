@@ -1,0 +1,11 @@
+node_modules
+dist
+.next
+.env
+.sites-runtime
+.wrangler
+*.log
+.env.*
+!.env.example
+backend/data/*.jsonl
+.vinext
