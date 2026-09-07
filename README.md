@@ -1,141 +1,165 @@
-# MCP Veri Asistanı v2
+# MCP Veri Asistanı
 
-React + TypeScript, NestJS, PostgreSQL ve Model Context Protocol (MCP) ile geliştirilmiş doğal dilde veri analiz uygulaması. Kullanıcı Türkçe soru sorar; backend güvenli bir SQL planı üretir, MCP sunucusu sorguyu salt-okunur PostgreSQL kullanıcısıyla çalıştırır ve sonuç arayüzde tablo olarak gösterilir.
+[![CI](https://github.com/CeydaYurdasucu/mcp-veri-asistani/actions/workflows/ci.yml/badge.svg)](https://github.com/CeydaYurdasucu/mcp-veri-asistani/actions/workflows/ci.yml)
 
-## Neler var?
+React, TypeScript, NestJS, PostgreSQL, Gemini ve Model Context Protocol (MCP) ile geliştirilmiş kurumsal veri analiz uygulaması. Kullanıcı Türkçe soru sorar; doğrulanmış metrikler doğrudan güvenli sorgu planına, diğer uygun sorular Gemini ile yapılandırılmış SQL planına dönüşür. SQL, PostgreSQL AST ayrıştırması ve açık izin listelerinden geçmeden çalıştırılmaz.
 
-- Canlı MCP/PostgreSQL sağlık kontrolü; arayüzdeki bağlantı etiketi gerçek API sonucudur.
-- OpenAI anahtarı varsa serbest doğal dil desteği, yoksa 8 konu başlığında çevrimdışı soru motoru.
+## Özellikler
+
+- Gerçek kullanıcı kaydı, güvenli giriş/çıkış ve `HttpOnly` sunucu oturumu.
+- Görüntüleyici, Analist ve Yönetici rolleriyle backend tarafından uygulanan RBAC.
+- Kullanıcıya özel sohbet geçmişi, mesajlar, favoriler ve profil.
+- Yöneticiye özel kullanıcı/rol yönetimi ve denetim kayıtları.
+- Gemini 3.1 Flash-Lite ile serbest doğal dil soruları.
+- Gemini kotası kullanmayan doğrulanmış kurumsal metrik kataloğu.
+- API anahtarı olmadığında temel sorular için çevrimdışı kural motoru.
+- Risk ve Aksiyon Merkezi.
 - MCP araçları: `health_check`, `get_schema`, `query_database`.
-- SQL güvenliği: yalnızca `SELECT/WITH`, tek statement, sistem tabloları engeli, salt-okunur transaction, 5 saniye zaman aşımı ve 50 satır sınırı.
-- Tarayıcıda saklanan son 40 mesaj ve son sorular.
-- Canlı veritabanı şeması ekranı.
+- PostgreSQL AST + tablo/fonksiyon/operatör/tip izin listesi.
+- KPI kartları, tablo, otomatik grafik, CSV dışa aktarma ve SQL kopyalama.
 - Swagger API dokümantasyonu.
-- Backend ve MCP güvenlik testleri.
-- Windows uyumlu çalıştırma komutları.
+- GitHub Actions ile otomatik derleme ve test.
 
 ## Mimari
 
 ```text
-React + TypeScript → NestJS REST API → MCP istemcisi → MCP sunucusu → PostgreSQL
-                                      ↘ OpenAI Responses API (isteğe bağlı)
+React + TypeScript
+        │
+        ▼
+NestJS REST API ──► Kimlik, oturum, RBAC ve denetim kaydı
+        │
+        ├──► Doğrulanmış metrik / çevrimdışı planlayıcı
+        └──► Gemini yapılandırılmış SQL planı
+        │
+        ▼
+MCP query_database
+        │
+        ├──► PostgreSQL AST ayrıştırma
+        ├──► Açık izin listeleri
+        └──► Read-only transaction + 5 sn timeout + 50 satır
+        │
+        ▼
+PostgreSQL
 ```
 
-Ayrıntılı mimari ve ER diyagramı: [`docs/MIMARI.md`](docs/MIMARI.md)
+Gemini veritabanına bağlanmaz. İş verileri yalnızca MCP ve `chatbot_reader` üzerinden okunur. Kullanıcı/oturum/sohbet verileri ayrı `app_identity` şemasında `app_writer` tarafından yönetilir.
+
+Ayrıntılar: [`docs/MIMARI.md`](docs/MIMARI.md)
 
 ## Gerekenler
 
-- Node.js 22.13 veya üzeri
+- Node.js 22 veya üzeri
 - npm
-- Docker Desktop (çalışır durumda)
+- Docker Desktop
+- Serbest sorular için Gemini API anahtarı
 
 ## Windows / PowerShell kurulumu
 
-### v1'den v2'ye geçiyorsanız
-
-Yeni ZIP'i ayrı bir klasöre çıkarın. Eski Docker volume'unda `chatbot_reader` kullanıcısı yoksa v2'nin salt-okunur bağlantısı kurulamaz. Bir defaya mahsus şu komutlarla örnek veritabanını yeniden oluşturun (yalnızca projenin örnek verisini siler):
+Proje ana klasöründe PostgreSQL'i başlatın:
 
 ```powershell
-docker compose down -v
-docker compose up -d
-```
-
-İlk kez kuruyorsanız aşağıdan devam edin.
-
-Ana proje klasöründe:
-
-```powershell
-docker compose up -d
+docker compose up -d postgres
 docker compose ps
 ```
 
-`postgres` servisinin durumu `healthy` olduktan sonra MCP sunucusunu derleyin:
+İlk kurulumda üyelik şemasını oluşturun:
 
 ```powershell
-cd .\mcp-server
-npm install --prefer-online
-npm run build
-cd ..
+docker compose cp .\database\002-identity-and-user-data.sql postgres:/tmp/identity.sql
+$dbUser = (docker compose exec -T postgres printenv POSTGRES_USER).Trim()
+$dbName = (docker compose exec -T postgres printenv POSTGRES_DB).Trim()
+docker compose exec -T postgres psql -U $dbUser -d $dbName -f /tmp/identity.sql
 ```
 
-Backend'i hazırlayın:
+Bağımlılıkları ve MCP derlemesini hazırlayın:
 
 ```powershell
-cd .\backend
-npm install --prefer-online
-Copy-Item ..\.env.example .env
+npm install
+npm install --prefix backend
+npm install --prefix mcp-server
+npm run build --prefix mcp-server
+```
+
+`.env.example` dosyasını `backend/.env` olarak kopyalayın ve kendi Gemini anahtarınızı ekleyin:
+
+```env
+GEMINI_API_KEY=KENDI_ANAHTARINIZ
+GEMINI_MODEL=gemini-3.1-flash-lite
+```
+
+Backend'i çalıştırın:
+
+```powershell
+cd backend
 npm run dev
 ```
 
-Backend terminalini açık bırakın. Yeni terminalde frontend'i çalıştırın:
+Yeni terminalde frontend'i çalıştırın:
 
 ```powershell
 cd C:\projenin\bulundugu\klasor\MCP-Veri-Asistani
-npm install --prefer-online
 npm run dev
 ```
 
 Adresler:
 
 - Arayüz: http://localhost:3000
+- API: http://localhost:3001
 - Sağlık kontrolü: http://localhost:3001/health
 - Swagger: http://localhost:3001/docs
-- Şema API'si: http://localhost:3001/schema
 
-## OpenAI ile serbest soru desteği
+İlk oluşturulan hesap kurucu Yönetici olur; sonraki hesaplar Görüntüleyici rolüyle başlar.
 
-Anahtar zorunlu değildir. Anahtar yoksa stok, satış, ciro, ürün, kategori, müşteri, sipariş ve fiyat konularındaki yaygın sorular çevrimdışı çalışır.
+## Güvenlik modeli
 
-Serbest sorular için `backend/.env` dosyasını açın:
+SQL güvenliği bir yasaklı kelime listesine dayanmaz. MCP katmanı şu sırayla fail-closed doğrulama yapar:
 
-```env
-OPENAI_API_KEY=sk-proje-anahtariniz
-OPENAI_MODEL=gpt-4o-mini
-```
+1. Sorgu gerçek PostgreSQL ayrıştırıcısıyla AST'ye çevrilir.
+2. Yalnızca tek bir kök `SelectStmt` kabul edilir; `WITH` içindeki bütün CTE'ler de SELECT olmalıdır.
+3. Yalnızca `products`, `customers`, `orders`, `order_items` tabloları ve sorguda tanımlanan CTE'ler kullanılabilir.
+4. AST düğümleri, fonksiyonlar, operatörler ve veri tipleri açık izin listeleriyle doğrulanır.
+5. `SELECT INTO`, recursive CTE, satır kilitleme, başka şemalar, sistem katalogları, tablo fonksiyonları ve bilinmeyen yapılar reddedilir.
+6. PostgreSQL oturumunda `search_path = pg_catalog, public` sabitlenir.
+7. `chatbot_reader` yalnız `SELECT` yetkilidir; sorgu read-only transaction içinde, 5 saniye zaman aşımıyla çalışır ve sonuç 50 satırla sınırlandırılır.
 
-Anahtarı koda, Git deposuna veya ekran görüntüsüne eklemeyin. Değişiklikten sonra backend'i yeniden başlatın. En güncel entegrasyon, OpenAI'nin yeni projeler için önerdiği Responses API ve JSON Schema tabanlı Structured Outputs kullanır:
+AST doğrulaması uygulama katmanındaki ana kontroldür; veritabanı rolü ve read-only transaction bağımsız ikinci savunma hattıdır. Yeni bir SQL özelliği gerektiğinde genel erişim açmak yerine ilgili AST düğümü/fonksiyonu testle birlikte izin listesine eklenmelidir.
 
-- https://developers.openai.com/api/docs/guides/migrate-to-responses
-- https://developers.openai.com/api/docs/guides/structured-outputs
-
-## Örnek sorular
-
-- Stoku 10'un altında olan ürünler hangileri?
-- En çok satış yapılan 5 ürünü göster.
-- En az satılan ürünleri listele.
-- Bu ayın toplam cirosu ne kadar?
-- Ortalama ürün fiyatı nedir?
-- En pahalı 5 ürün hangisi?
-- Kategorilere göre ürün sayılarını göster.
-- Kaç müşterimiz var?
-- Son 10 siparişi göster.
+Tehdit modeli ve kalan riskler: [`SECURITY.md`](SECURITY.md)
 
 ## Testler
 
-```powershell
-cd .\backend
-npm test
+Tüm frontend, backend ve MCP kontrolleri tek komutla çalışır:
 
-cd ..\mcp-server
+```powershell
 npm test
 ```
 
-Manuel test listesi: [`docs/TEST-SENARYOLARI.md`](docs/TEST-SENARYOLARI.md)
+Test grupları:
+
+- Frontend üretim derlemesi.
+- Backend planlayıcı, oturum ve rol sınırı testleri.
+- 22 MCP güvenlik testi: normal SELECT/CTE/aggregate senaryoları ile çoklu statement, DML CTE, `SELECT INTO`, kilitleme, recursive CTE, sistem şeması, bilinmeyen tablo/fonksiyon, tablo fonksiyonu, tehlikeli cast ve bozuk SQL saldırı örnekleri.
+
+Her `main` push'u ve pull request için aynı komut `.github/workflows/ci.yml` tarafından çalıştırılır. Manuel kabul senaryoları: [`docs/TEST-SENARYOLARI.md`](docs/TEST-SENARYOLARI.md)
 
 ## Klasörler
 
-- `app/`: React + TypeScript kullanıcı arayüzü
-- `backend/`: NestJS REST API, OpenAI entegrasyonu ve MCP istemcisi
-- `mcp-server/`: PostgreSQL MCP araçları ve SQL güvenlik katmanı
-- `database/`: PostgreSQL şeması ve örnek veriler
-- `docs/`: mimari, test ve sunum dokümanları
+- `app/`: React + TypeScript arayüzü
+- `backend/`: NestJS API, Gemini entegrasyonu, kimlik/RBAC ve MCP istemcisi
+- `mcp-server/`: MCP araçları, AST güvenlik katmanı ve salt-okunur PostgreSQL erişimi
+- `database/`: İş verisi ve `app_identity` şeması geçişleri
+- `docs/`: Mimari, teknik rapor, test ve sunum belgeleri
 
-## Teslimde anlatılacak kısa akış
+## Örnek sorular
 
-1. Kullanıcı doğal dilde soru gönderir.
-2. NestJS, OpenAI veya çevrimdışı planlayıcıyla salt-okunur SQL üretir.
-3. Backend veritabanına doğrudan sorgu göndermez; MCP istemcisi `query_database` aracını çağırır.
-4. MCP sunucusu SQL'i doğrular ve PostgreSQL'de read-only transaction içinde çalıştırır.
-5. Cevap, kullanılan SQL, çalışma modu, süre ve sonuç satırlarıyla arayüzde gösterilir.
+- Bu ayın toplam cirosu ne kadar?
+- Stoku 20'nin altında olan ürünler hangileri?
+- En çok satış yapılan 5 ürünü göster.
+- Tamamlanan siparişlerin ortalama ve en yüksek tutarını göster.
+- Kategorilere göre ürün sayılarını listele.
 
-Sunum konuşma metni: [`docs/SUNUM-NOTLARI.md`](docs/SUNUM-NOTLARI.md)
+## Bilinen sınırlar
+
+- E-posta doğrulama, parola sıfırlama ve kurumsal SSO bu sürümün kapsamında değildir.
+- Gemini yalnız izin listesinin desteklediği SQL alt kümesini kullanabilir; desteklenmeyen güvenli bir SQL yapısı da fail-closed reddedilebilir.
+- Demo parolaları yalnız yerel geliştirme içindir. Üretimde secret manager, TLS, güçlü parolalar ve merkezi kimlik sağlayıcısı kullanılmalıdır.

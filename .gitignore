@@ -1,11 +1,13 @@
 node_modules
 dist
 .next
+.vinext
 .env
 .sites-runtime
 .wrangler
+coverage
 *.log
-.env.*
-!.env.example
+*.tsbuildinfo
 backend/data/*.jsonl
-.vinext
+.DS_Store
+Thumbs.db

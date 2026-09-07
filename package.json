@@ -10,16 +10,17 @@
     "dev": "vite --port 3000",
     "setup:all": "npm install && npm install --prefix backend && npm install --prefix mcp-server && npm run build --prefix mcp-server",
     "build:all": "npm run build && npm run build --prefix backend && npm run build --prefix mcp-server",
-    "test:all": "npm test --prefix backend && npm test --prefix mcp-server",
+    "test:all": "npm test",
     "build": "bash scripts/build-verified.sh",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run test:frontend && npm run test:backend && npm run test:mcp",
+    "test:frontend": "vite build",
+    "test:backend": "npm test --prefix backend",
+    "test:mcp": "npm test --prefix mcp-server",
     "validate:artifact": "bash scripts/validate-artifact.sh",
-    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern backend/dist --ignore-pattern mcp-server/dist",
-    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
+    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern backend/dist --ignore-pattern mcp-server/dist"
   },
   "dependencies": {
-    "drizzle-orm": "0.45.2",
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"
@@ -32,7 +33,6 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
-    "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "react-server-dom-webpack": "19.2.6",
@@ -43,5 +43,5 @@
     "wrangler": "4.92.0"
   },
   "type": "module",
-  "displayName": "MCP Veri Asistan\u0131"
+  "displayName": "MCP Veri Asistanı"
 }

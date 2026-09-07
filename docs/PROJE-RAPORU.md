@@ -1,55 +1,85 @@
-# MCP Tabanlı Doğal Dil Veri Asistanı — Proje Raporu
+# MCP Tabanlı Kurumsal Veri Asistanı — Teknik Proje Raporu
 
 ## Özet
 
-Bu projede kullanıcıların SQL bilmeden kurumsal satış verilerini sorgulayabilmesi amaçlanmıştır. React ve TypeScript ile geliştirilen web arayüzü, soruları NestJS API'ye iletir. API, isteğe bağlı OpenAI Responses API veya yerel kural motoruyla bir SQL planı oluşturur. Oluşturulan plan doğrudan veritabanına gönderilmez; Model Context Protocol istemcisi üzerinden ayrı bir MCP sunucusuna aktarılır. MCP sunucusu güvenlik doğrulamasından geçen sorguyu salt-okunur PostgreSQL bağlantısıyla çalıştırır.
+VeriAsistan, kullanıcıların SQL bilmeden kurumsal satış verilerini Türkçe sorularla analiz edebilmesini amaçlayan bir web uygulamasıdır. React ve TypeScript arayüzü, istekleri NestJS API'ye iletir. Doğrulanmış metrik kataloğuyla eşleşen sorular deterministik sorgu planına dönüştürülür; diğer uygun sorularda Gemini yapılandırılmış bir SQL planı üretir. SQL doğrudan veritabanına gönderilmez. Model Context Protocol (MCP) sunucusu sorguyu gerçek PostgreSQL parser ile AST'ye çevirir, açık izin listeleriyle doğrular ve yalnız salt-okunur bağlantı üzerinden çalıştırır. Uygulamada gerçek kullanıcı hesabı, rol bazlı erişim, kullanıcıya özel sohbet/favori verisi ve denetim kaydı da bulunmaktadır.
 
 ## Amaç ve kapsam
 
-Proje aşağıdaki hedefleri karşılar:
-
-- Doğal dil sorularından veri analizi yapmak.
-- Yapay zekâ ile veritabanı arasındaki erişimi MCP araçlarıyla standartlaştırmak.
-- Üretilen SQL'i kullanıcıya göstererek açıklanabilirlik sağlamak.
-- Verinin değiştirilmesini çok katmanlı güvenlikle önlemek.
-- Yapay zekâ API anahtarı olmadan da gösterilebilir bir çevrimdışı mod sunmak.
+- Doğal dil sorularından açıklanabilir veri analizi üretmek.
+- Yapay zekâ ile veritabanı arasına denetlenebilir MCP araç sınırı koymak.
+- Sık kullanılan şirket metriklerini doğrulanmış tanımlarla hesaplamak.
+- Kullanıcıları ve sohbet verilerini birbirinden ayırmak.
+- Rol ve denetim kaydıyla kurumsal erişim modelini göstermek.
+- SQL sorgularını fail-closed ve çok katmanlı güvenlik yaklaşımıyla sınırlandırmak.
 
 ## Kullanılan teknolojiler
 
 | Teknoloji | Kullanım amacı |
 | --- | --- |
-| React + TypeScript | Etkileşimli, tip güvenli kullanıcı arayüzü |
-| NestJS | REST API, doğrulama, Swagger ve iş akışı yönetimi |
-| MCP TypeScript SDK | Backend ile veri aracı arasında standart protokol |
-| PostgreSQL 16 | İlişkisel satış veritabanı |
-| Docker Compose | Tek komutla yeniden üretilebilir veritabanı ortamı |
-| OpenAI Responses API | Serbest doğal dil sorularından yapılandırılmış SQL planı |
-| Jest / Node Test Runner | Planlayıcı ve SQL güvenlik testleri |
+| React + TypeScript | Sohbet, metrik, risk, kullanıcı ve denetim arayüzleri |
+| NestJS | REST API, kimlik/oturum, RBAC, doğrulanmış metrikler ve Gemini akışı |
+| Gemini 3.1 Flash-Lite | Serbest doğal dil sorularından yapılandırılmış SQL planı |
+| MCP TypeScript SDK | Backend ile veritabanı aracı arasında standart protokol |
+| `pgsql-parser` | Gerçek PostgreSQL grameriyle AST üretimi |
+| PostgreSQL 16 | İş verisi ve ayrı uygulama kimlik şeması |
+| Docker Compose | Yeniden üretilebilir yerel veritabanı ortamı |
+| Jest / Node Test Runner | Backend davranışı ve MCP güvenlik testleri |
+| GitHub Actions | Her push ve pull request için otomatik test kanıtı |
 
-## Uygulama akışı
+## Sistem mimarisi ve sorgu akışı
 
-Kullanıcı sorusu `POST /chat` endpoint'ine ulaşır. DTO katmanı uzunluk ve tür kontrolü uygular. API anahtarı varsa OpenAI'ye yalnızca izin verilen şema gönderilir ve JSON Schema'ya uyan bir sorgu planı alınır. Anahtar yoksa çevrimdışı planlayıcı, sorudaki konu ve sayısal eşiklere göre önceden tanımlı güvenli sorgulardan birini seçer. NestJS MCP istemcisi, `query_database` aracını stdio üzerinden çağırır. MCP sunucusu sorguyu doğrular, sınırlar ve PostgreSQL'de çalıştırır. Sonuç süre ve kaynak bilgisiyle frontend'e döner.
+1. Kullanıcı güvenli sunucu oturumuyla uygulamaya giriş yapar.
+2. NestJS, isteğin kullanıcı kimliğini ve rol yetkisini doğrular.
+3. Soru doğrulanmış metrik kataloğuyla eşleşirse güvenli plan doğrudan seçilir.
+4. Eşleşmeyen uygun soru, yalnız izin verilen şema ve metrik tanımlarıyla Gemini'ye gönderilir. Gemini'nin görevi yalnızca sorgu planı üretmektir; veritabanı bağlantısına erişimi yoktur.
+5. NestJS, SQL'i stdio üzerinden MCP `query_database` aracına iletir.
+6. MCP sorguyu PostgreSQL AST'sine çevirir ve açık izin listeleriyle doğrular.
+7. Geçerli sorgu `chatbot_reader` kullanıcısıyla read-only transaction içinde çalışır.
+8. En fazla 50 satırlık sonuç, kaynak ve süre bilgisiyle arayüze döner; işlem denetim kaydına yazılır.
+
+## Kimlik ve rol modeli
+
+İlk kayıt kurucu Yönetici olur; sonraki kullanıcılar Görüntüleyici rolüyle başlar. Görüntüleyici yalnız doğrulanmış metrikleri, Analist serbest analiz ve Risk Merkezi'ni, Yönetici ise bunlara ek olarak kullanıcı/rol yönetimi ile denetim kayıtlarını kullanabilir. Parolalar salt içeren scrypt özetiyle, oturum belirteçleri yalnız SHA-256 özetiyle saklanır. Tarayıcı oturumu `HttpOnly` ve `SameSite=Strict` çerezi kullanır. Kullanıcı sohbetleri, mesajları ve favorileri oturumdaki `user_id` ile filtrelenir.
 
 ## Veritabanı tasarımı
 
-Veritabanında ürünler, müşteriler, siparişler ve sipariş kalemleri tabloları bulunur. Müşteri-sipariş ilişkisi bire-çoktur. Sipariş ile ürün arasındaki çoktan-çoğa ilişki `order_items` tablosuyla çözülmüştür. Örnek veri setinde 16 ürün, 10 müşteri ve farklı durum/tarihlerde 14 sipariş bulunur.
+İş verisi `public` şemasındaki `products`, `customers`, `orders` ve `order_items` tablolarında tutulur. Müşteri-sipariş ilişkisi bire-çoktur; sipariş ve ürün arasındaki çoktan-çoğa ilişki `order_items` ile çözülür. Kullanıcı, oturum, sohbet, mesaj ve favori kayıtları ayrı `app_identity` şemasındadır. `chatbot_reader` iş tablolarında yalnız SELECT yetkisine, `app_writer` ise yalnız uygulama şemasında gerekli yazma yetkilerine sahiptir.
 
-## Güvenlik değerlendirmesi
+## SQL güvenliği ve risk değerlendirmesi
 
-Yalnızca prompt ile güvenlik sağlanmamıştır. SQL metni MCP katmanında ikinci kez doğrulanır. Veri değiştiren komutlar, çoklu statement, SQL yorumları, sistem katalogları ve satır kilitleri reddedilir. Veritabanı kullanıcısına yalnızca `SELECT` yetkisi verilmiştir. Sorgular read-only transaction içinde ve 5 saniye timeout ile çalıştırılır. Sonuç seti her koşulda 50 satırla sınırlandırılır.
+İlk sürümde SQL doğrulaması yasaklı kelimeleri arayan regex/blacklist yaklaşımına dayanıyordu. Bu yaklaşım SQL'in sözdizimsel yapısını anlamadığı için öngörülmeyen bir kalıbın uygulama filtresini aşması veya güvenli bir metnin yanlışlıkla reddedilmesi riskini taşıyordu. Veritabanı rolü ve read-only transaction veri değişikliğine karşı bağımsız koruma sağlasa da regex tek başına yeterli bir uygulama güvenlik sınırı değildi.
 
-## Test ve sonuç
+Güncel sürümde sorgu gerçek PostgreSQL parser ile AST'ye dönüştürülür ve aşağıdaki açık izin politikası uygulanır:
 
-Backend planlayıcı testleri stok eşiği çıkarma, farklı konu planları, bilinmeyen soru davranışı ve sonuç özetlemeyi doğrular. MCP güvenlik testleri izin verilen sorguların kabulünü ve tehlikeli SQL örneklerinin reddini doğrular. Üç uygulama katmanı TypeScript/üretim derlemesinden geçmektedir. Manuel senaryolar sağlık kontrolü, sohbet, şema görünümü, bağlantı kesintisi, kalıcı geçmiş ve Swagger arayüzünü kapsar.
+- Yalnız tek bir kök `SelectStmt` kabul edilir.
+- `WITH` içindeki her CTE yine yalnız SELECT olabilir; recursive CTE reddedilir.
+- Fiziksel tablo erişimi dört iş tablosuyla sınırlıdır; yalnız `public` şeması kabul edilir.
+- AST düğümleri, fonksiyonlar, operatörler ve cast veri tipleri açık izin listelerindedir.
+- `SELECT INTO`, satır kilitleme, DML CTE, sistem şemaları, tablo fonksiyonları, kullanıcı tanımlı fonksiyonlar ve bilinmeyen AST düğümleri fail-closed reddedilir.
+- PostgreSQL `search_path` değeri `pg_catalog, public` olarak sabitlenir.
+- Sorgu yalnız SELECT yetkili kullanıcıyla read-only transaction içinde çalışır; statement timeout 5 saniye, sonuç sınırı 50 satırdır.
+
+AST katmanı riski önemli ölçüde azaltır ancak tek savunma değildir. Parser bağımlılığında keşfedilecek bir hata, izin listesine yanlışlıkla eklenen bir fonksiyon veya pahalı fakat geçerli bir analitik ifade artık risk olarak kabul edilir. Bu nedenle en az yetkili veritabanı rolü, read-only transaction, zaman aşımı, satır sınırı, denetim kaydı ve saldırı testleri korunur. Yeni SQL yeteneği yalnız test eşliğinde izin listesine eklenmelidir.
+
+## Test kapsamı ve kanıt
+
+`npm test` komutu üç ayrı grubu tek akışta çalıştırır:
+
+- Frontend üretim derlemesi.
+- 7 backend testi: planlayıcı, kullanıcı kimliği, oturum ve rol sınırları.
+- 22 MCP güvenlik testi: normal SELECT/CTE/aggregate örnekleri ile çoklu statement, yorum, bilinmeyen tablo, başka şema, DML CTE, `SELECT INTO`, satır kilidi, recursive CTE, sistem/gecikme fonksiyonları, kullanıcı tanımlı fonksiyon, tablo fonksiyonu, tehlikeli cast, kimlik değeri ve bozuk SQL örnekleri.
+
+`.github/workflows/ci.yml`, aynı komutu her `main` push'u ve pull request için temiz Ubuntu/Node.js 22 ortamında çalıştırır. Böylece testlerin yalnızca kaynak kodda bulunması değil, gerçekten çalıştırılması da GitHub Actions geçmişinde görülebilir. `docs/TEST-SENARYOLARI.md` içindeki arayüz ve canlı veritabanı senaryoları manueldir; otomatik test sayısı gibi sunulmaz.
 
 ## Sınırlılıklar ve gelecek çalışmalar
 
-- Kullanıcı kimlik doğrulaması ve rol bazlı tablo erişimi eklenebilir.
-- Büyük sonuç kümeleri için sayfalama ve CSV dışa aktarma geliştirilebilir.
-- Grafik üretimi ve otomatik içgörü özelliği eklenebilir.
-- Sohbet geçmişi tarayıcı yerine veritabanında kullanıcı bazlı saklanabilir.
-- Model sorguları için maliyet ve doğruluk ölçümleri eklenebilir.
+- E-posta doğrulama, parola sıfırlama ve kurumsal SSO henüz yoktur.
+- AST izin listesi bilinmeyen fakat güvenli bir SQL yapısını da reddedebilir; politika bilinçli olarak fail-closed tasarlanmıştır.
+- Sohbet istekleri için merkezi rate limit ve dağıtık oturum deposu eklenebilir.
+- Model doğruluğu, gecikme ve maliyet metrikleri daha uzun süreli veriyle ölçülebilir.
+- Üretimde TLS, secret manager, yönetilen PostgreSQL ve merkezi gözlemleme kullanılmalıdır.
 
 ## Sonuç
 
-Proje, doğal dil ile ilişkisel veri analizi yapılabildiğini ve MCP'nin yapay zekâ ile veritabanı arasında denetlenebilir bir araç sınırı oluşturduğunu göstermektedir. Çevrimdışı mod sayesinde temel demo dış servise bağımlı değildir; OpenAI entegrasyonu ise soru çeşitliliğini genişletir.
+VeriAsistan; doğal dil analizi, doğrulanmış kurumsal metrikler, MCP araç sınırı, gerçek kimlik/rol yönetimi ve denetim kaydını tek bir prototipte birleştirir. Güvenlik geri bildirimi sonrasında regex tabanlı doğrulama kaldırılmış, yapısal PostgreSQL AST ve açık izin listesi uygulanmış, saldırı testleri genişletilmiş ve CI kanıtı eklenmiştir. Böylece proje yalnız çalışan bir demo olmaktan çıkarak güvenlik tercihlerini, sınırlarını ve kalan riskleri açıkça belgeleyen daha denetlenebilir bir mühendislik çalışmasına dönüşmüştür.
