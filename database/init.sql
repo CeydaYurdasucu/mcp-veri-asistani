@@ -11,4 +11,8 @@ INSERT INTO orders(customer_id,total,status,created_at) VALUES (6,2999.80,'compl
 INSERT INTO order_items(order_id,product_id,quantity,unit_price) VALUES (1,1,1,1499.90),(1,2,1,2199.00),(2,1,1,1499.90),(2,5,1,899.90),(3,3,1,3299.90),(4,6,1,1199.90),(4,4,1,649.90),(4,7,1,849.00),(5,8,2,249.90),(5,4,1,649.90),(5,8,1,249.90),(6,5,1,899.00);
 INSERT INTO order_items(order_id,product_id,quantity,unit_price) VALUES (7,9,1,1899.90),(7,10,1,1099.90),(8,11,1,499.90),(8,12,1,799.90),(9,14,1,2399.90),(10,13,1,329.90),(10,16,2,399.95),(11,10,1,1099.90),(12,2,1,2199.00),(12,15,1,549.90),(12,11,2,499.90),(13,12,1,799.90),(14,9,1,1899.90),(14,13,1,329.90);
 DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'chatbot_reader') THEN CREATE ROLE chatbot_reader LOGIN PASSWORD 'readerpass'; END IF; END $$;
-GRANT CONNECT ON DATABASE salesdb TO chatbot_reader; GRANT USAGE ON SCHEMA public TO chatbot_reader; GRANT SELECT ON ALL TABLES IN SCHEMA public TO chatbot_reader; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO chatbot_reader;
+GRANT CONNECT ON DATABASE salesdb TO chatbot_reader;
+GRANT USAGE ON SCHEMA public TO chatbot_reader;
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM chatbot_reader;
+GRANT SELECT ON TABLE public.products, public.customers, public.orders, public.order_items TO chatbot_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM chatbot_reader;

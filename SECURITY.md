@@ -13,7 +13,7 @@ VeriAsistan, model tarafından üretilen SQL'i güvenilir kabul etmez. İş veri
 
 ## Bağımsız savunma katmanları
 
-- PostgreSQL bağlantısı yalnız `SELECT` yetkili `chatbot_reader` rolünü kullanır.
+- PostgreSQL bağlantısı yalnız `public.products`, `public.customers`, `public.orders` ve `public.order_items` tablolarında `SELECT` yetkili `chatbot_reader` rolünü kullanır.
 - Her sorgu `BEGIN TRANSACTION READ ONLY` içinde çalışır.
 - `search_path`, `pg_catalog, public` ile sınırlandırılır.
 - Statement timeout 5 saniye, sonuç sınırı 50 satırdır.

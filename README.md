@@ -71,6 +71,13 @@ $dbName = (docker compose exec -T postgres printenv POSTGRES_DB).Trim()
 docker compose exec -T postgres psql -U $dbUser -d $dbName -f /tmp/identity.sql
 ```
 
+Mevcut bir veritabanında MCP okuyucu yetkisini dört iş tablosuyla sınırlamak için ayrıca:
+
+```powershell
+docker compose cp .\database\003-reader-grants.sql postgres:/tmp/reader-grants.sql
+docker compose exec -T postgres psql -U $dbUser -d $dbName -f /tmp/reader-grants.sql
+```
+
 Bağımlılıkları ve MCP derlemesini hazırlayın:
 
 ```powershell
@@ -148,7 +155,7 @@ Her `main` push'u ve pull request için aynı komut `.github/workflows/ci.yml` t
 - `backend/`: NestJS API, Gemini entegrasyonu, kimlik/RBAC ve MCP istemcisi
 - `mcp-server/`: MCP araçları, AST güvenlik katmanı ve salt-okunur PostgreSQL erişimi
 - `database/`: İş verisi ve `app_identity` şeması geçişleri
-- `docs/`: Mimari, teknik rapor, test ve sunum belgeleri
+- `docs/`: Mimari, teknik rapor ve test belgeleri
 
 ## Örnek sorular
 
