@@ -11,10 +11,10 @@ type CookieResponse = {
 };
 
 class RegisterDto {
-  @ApiProperty({ example: "Nehir Tok", minLength: 2, maxLength: 80 })
+  @ApiProperty({ example: "Örnek Kullanıcı", minLength: 2, maxLength: 80 })
   @IsString() @MinLength(2) @MaxLength(80) name!: string;
 
-  @ApiProperty({ example: "nehir@firma.com", maxLength: 180 })
+  @ApiProperty({ example: "ornek@firma.com", maxLength: 180 })
   @IsEmail() @MaxLength(180) email!: string;
 
   @ApiProperty({ minLength: 8, maxLength: 72, description: "En az bir küçük harf, büyük harf ve rakam" })
@@ -24,12 +24,12 @@ class RegisterDto {
 }
 
 class LoginDto {
-  @ApiProperty({ example: "nehir@firma.com" }) @IsEmail() @MaxLength(180) email!: string;
+  @ApiProperty({ example: "ornek@firma.com" }) @IsEmail() @MaxLength(180) email!: string;
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(72) password!: string;
 }
 
 class ProfileDto {
-  @ApiProperty({ example: "Nehir Tok" }) @IsString() @MinLength(2) @MaxLength(80) name!: string;
+  @ApiProperty({ example: "Örnek Kullanıcı" }) @IsString() @MinLength(2) @MaxLength(80) name!: string;
   @ApiProperty({ example: "Veri Analisti" }) @IsString() @MaxLength(80) title!: string;
 }
 
