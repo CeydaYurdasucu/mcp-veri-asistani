@@ -28,6 +28,7 @@ Bu komut `INTEGRATION_APP_DATABASE_URL`, `INTEGRATION_DATABASE_URL` ve `INTEGRAT
 | MCP — reddedilen | DML, çoklu statement, yorum, bilinmeyen tablo, sistem/özel şema, DML CTE, SELECT INTO, satır kilidi, recursive CTE, tehlikeli/bilinmeyen fonksiyon, tablo fonksiyonu, özel cast, kimlik değeri ve bozuk SQL |
 | PostgreSQL/MCP entegrasyonu | Gerçek MCP stdio istemcisiyle izinli tabloların okunması; yetkisiz tablo/şema, çoklu statement ve DML'in AST + `chatbot_reader` rolü tarafından reddedilmesi; şema çıktısının dört tabloyla sınırlı olması |
 | Kimlik/RBAC entegrasyonu | Gerçek `app_identity` PostgreSQL tablolarında ilk kayıt yönetici, sonraki kayıt görüntüleyici; görüntüleyicinin `free_chat` yetkisinin 403 karşılığı ve yöneticinin kullanıcı yönetimi yetkisi |
+| Rate limit ve metrik sürümleme | IP/kapsam başına kayan pencere sınırı, pencere sona erince yeniden kabul; doğrulanmış plan ve Gemini katalog bağlamında aynı katalog sürümü |
 
 ## Manuel kabul testleri
 
@@ -47,6 +48,8 @@ Bu bölüm otomatik test sayısına dahil değildir; çalışan frontend, backen
 | 10 | Risk Merkezi'ni aç | Özet kartları ve aksiyon kayıtları görüntülenir |
 | 11 | Yönetici Denetim kayıtlarını aç | Başarılı, engellenen ve hatalı işlemler listelenir; CSV indirilebilir |
 | 12 | Backend'i durdur | Bağlantı durumu bozulur ve yeni sorgu kontrollü hata verir |
+| 13 | Aynı IP'den 31 sohbet isteği gönder | İlk 30 istek işlenir; sonraki istek 429 ve yeniden deneme süresi mesajıyla reddedilir |
+| 14 | Veri sözlüğünü aç ve doğrulanmış metrik çalıştır | Katalog sürümü görünür; sohbet yanıtında aynı `Metrik v1.1.0` etiketi yer alır |
 
 ## Güvenlik regresyon testi
 
@@ -56,6 +59,6 @@ Yalnız MCP AST güvenlik testlerini çalıştırmak için:
 npm test --prefix mcp-server
 ```
 
-Başarılı sonuçta `22` testin geçtiği ve `0` testin başarısız olduğu görülmelidir. Testler veritabanına bağlanmaz ve veri değiştirmez; gerçek PostgreSQL parser tarafından üretilen AST üzerinde izin politikalarını doğrular.
+Başarılı sonuçta `22` MCP testinin geçtiği ve `0` testin başarısız olduğu görülmelidir. Backend statik akışında rate limit ve katalog sürümü testleri de çalışır. Testler veritabanına bağlanmaz ve veri değiştirmez; gerçek PostgreSQL parser tarafından üretilen AST üzerinde izin politikalarını doğrular.
 
 Gerçek veritabanı güvenlik testlerinde ise izinli `SELECT`, yetkisiz tablo/şema, çoklu statement, veri değiştiren CTE, doğrudan `INSERT` ve `chatbot_reader` izinleri kontrol edilir. Bu testler yalnızca CI'ın geçici veritabanında veya açıkça ayrılmış boş bir test veritabanında çalıştırılmalıdır.

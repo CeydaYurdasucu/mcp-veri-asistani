@@ -18,6 +18,8 @@ React, TypeScript, NestJS, PostgreSQL, Gemini ve Model Context Protocol (MCP) il
 - PostgreSQL AST + tablo/fonksiyon/operatör/tip izin listesi.
 - KPI kartları, tablo, otomatik grafik, CSV dışa aktarma ve SQL kopyalama.
 - Swagger API dokümantasyonu.
+- Kayıt, giriş ve sohbet uçlarında IP tabanlı süreç içi rate limiting.
+- Doğrulanmış metrik kataloğu sürümleme ve sohbet/denetim kayıtlarında sürüm izi.
 - GitHub Actions ile otomatik derleme ve test.
 
 ## Mimari
@@ -76,6 +78,9 @@ Mevcut bir veritabanında MCP okuyucu yetkisini dört iş tablosuyla sınırlama
 ```powershell
 docker compose cp .\database\003-reader-grants.sql postgres:/tmp/reader-grants.sql
 docker compose exec -T postgres psql -U $dbUser -d $dbName -f /tmp/reader-grants.sql
+
+docker compose cp .\database\004-metric-version.sql postgres:/tmp/metric-version.sql
+docker compose exec -T postgres psql -U $dbUser -d $dbName -f /tmp/metric-version.sql
 ```
 
 Bağımlılıkları ve MCP derlemesini hazırlayın:
@@ -128,6 +133,7 @@ SQL güvenliği bir yasaklı kelime listesine dayanmaz. MCP katmanı şu sırayl
 5. `SELECT INTO`, recursive CTE, satır kilitleme, başka şemalar, sistem katalogları, tablo fonksiyonları ve bilinmeyen yapılar reddedilir.
 6. PostgreSQL oturumunda `search_path = pg_catalog, public` sabitlenir.
 7. `chatbot_reader` yalnız `SELECT` yetkilidir; sorgu read-only transaction içinde, 5 saniye zaman aşımıyla çalışır ve sonuç 50 satırla sınırlandırılır.
+8. Kayıt (5/15 dk), giriş (10/15 dk) ve sohbet (30/dk) istekleri IP başına süreç içi kayan pencereyle sınırlandırılır; dağıtık üretim için merkezi Redis/ağ geçidi gerekir.
 
 AST doğrulaması uygulama katmanındaki ana kontroldür; veritabanı rolü ve read-only transaction bağımsız ikinci savunma hattıdır. Yeni bir SQL özelliği gerektiğinde genel erişim açmak yerine ilgili AST düğümü/fonksiyonu testle birlikte izin listesine eklenmelidir.
 
@@ -144,21 +150,22 @@ npm test
 Test grupları:
 
 - Frontend üretim derlemesi.
-- Backend planlayıcı, oturum ve rol sınırı testleri.
+- Backend planlayıcı, oturum, rol sınırı, rate limit ve metrik katalog sürümü testleri.
 - 22 MCP güvenlik testi: normal SELECT/CTE/aggregate senaryoları ile çoklu statement, DML CTE, `SELECT INTO`, kilitleme, recursive CTE, sistem şeması, bilinmeyen tablo/fonksiyon, tablo fonksiyonu, tehlikeli cast ve bozuk SQL saldırı örnekleri.
 
 Gerçek PostgreSQL entegrasyon testleri, Docker üzerinde geçici bir veritabanıyla ayrıca çalıştırılır:
 
 ```powershell
 docker compose up -d postgres
-# database/init.sql, database/002-identity-and-user-data.sql ve
-# database/003-reader-grants.sql geçişlerini uyguladıktan sonra:
+# database/init.sql, database/002-identity-and-user-data.sql,
+# database/003-reader-grants.sql ve database/004-metric-version.sql
+# geçişlerini uyguladıktan sonra:
 npm run test:integration
 ```
 
 Bu akış; MCP istemcisinin gerçek `chatbot_reader` rolüyle dört izinli tabloyu okuyabildiğini, yetkisiz tablo/şema ve DML sorgularının MCP + PostgreSQL tarafından reddedildiğini, ayrıca gerçek oturumlarla ilk hesabın yönetici ve sonraki hesabın görüntüleyici olduğunu doğrular. Entegrasyon testi güvenlik nedeniyle yalnızca boş ve geçici `app_identity` veritabanında çalışır. GitHub Actions her push ve pull request'te PostgreSQL hizmeti başlatır, geçişleri uygular ve bu testi otomatik çalıştırır.
 
-Güncel üç paket alanında `npm audit --audit-level=moderate` sonucu 0 güvenlik açığıdır. `npm audit fix --force` gibi ana sürüm yükseltmeleri uygulanmamış; bağımlılıklar kilit dosyalarıyla tekrarlanabilir tutulmuştur.
+`npm audit --audit-level=moderate --omit=dev` kök üretim bağımlılıklarında temiz sonuç verir; backend ve MCP tarafında NestJS/multer ve Hono'nun transitive uyarıları görülebilir. `npm audit fix --force` gibi kırıcı ana sürüm yükseltmeleri uygulanmamış; bu uyarılar üretim öncesi bağımlılık yükseltme planında izlenmektedir.
 
 Her `main` push'u ve pull request için aynı komut `.github/workflows/ci.yml` tarafından çalıştırılır. Manuel kabul senaryoları: [`docs/TEST-SENARYOLARI.md`](docs/TEST-SENARYOLARI.md)
 

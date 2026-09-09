@@ -1,9 +1,16 @@
-import { Body, Controller, Delete, Get, Headers, Param, ParseUUIDPipe, Patch, Post, Res } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpException, HttpStatus, Ip, Param, ParseUUIDPipe, Patch, Post, Res } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiCookieAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateNested } from "class-validator";
 import type { AccessRole, AuthHeaders } from "./access-control";
 import { ChatService } from "./chat.service";
+import { IpRateLimiter, type RateLimitConfig } from "./rate-limit";
+
+const RATE_LIMITS: Record<"register" | "login" | "chat", RateLimitConfig> = {
+  register: { windowMs: 15 * 60_000, max: 5 },
+  login: { windowMs: 15 * 60_000, max: 10 },
+  chat: { windowMs: 60_000, max: 30 },
+};
 
 type CookieResponse = {
   cookie: (name: string, value: string, options: { httpOnly: boolean; sameSite: "strict"; secure: boolean; path: string; maxAge: number }) => void;
@@ -61,9 +68,15 @@ class ChatDto {
 
 @Controller()
 export class ChatController {
-  constructor(private readonly chat: ChatService) {}
+  constructor(private readonly chat: ChatService, private readonly rateLimiter: IpRateLimiter) {}
 
   private auth(authorization?: string, cookie?: string): AuthHeaders { return { authorization, cookie }; }
+  private enforceRateLimit(scope: keyof typeof RATE_LIMITS, ip?: string) {
+    const decision = this.rateLimiter.check(scope, ip, RATE_LIMITS[scope]);
+    if (!decision.allowed) {
+      throw new HttpException(`Çok fazla istek gönderildi. ${decision.retryAfterSeconds} saniye sonra tekrar dene.`, HttpStatus.TOO_MANY_REQUESTS);
+    }
+  }
   private sessionCookie(response: CookieResponse, token: string) {
     response.cookie("veriasistan_session", token, {
       httpOnly: true,
@@ -79,7 +92,8 @@ export class ChatController {
 
   @ApiTags("authentication") @ApiOperation({ summary: "Gerçek kullanıcı hesabı oluşturur; ilk hesap kurucu yöneticidir" })
   @ApiBody({ type: RegisterDto }) @Post("auth/register")
-  async register(@Body() body: RegisterDto, @Res({ passthrough: true }) response: CookieResponse) {
+  async register(@Body() body: RegisterDto, @Ip() ip: string, @Res({ passthrough: true }) response: CookieResponse) {
+    this.enforceRateLimit("register", ip);
     const result = await this.chat.register(body.name, body.email, body.password);
     this.sessionCookie(response, result.token);
     return { ...result.payload, firstOrganizationAdmin: result.firstOrganizationAdmin };
@@ -87,7 +101,8 @@ export class ChatController {
 
   @ApiTags("authentication") @ApiOperation({ summary: "E-posta ve şifreyle güvenli oturum açar" })
   @ApiBody({ type: LoginDto }) @Post("auth/login")
-  async login(@Body() body: LoginDto, @Res({ passthrough: true }) response: CookieResponse) {
+  async login(@Body() body: LoginDto, @Ip() ip: string, @Res({ passthrough: true }) response: CookieResponse) {
+    this.enforceRateLimit("login", ip);
     const result = await this.chat.login(body.email, body.password);
     this.sessionCookie(response, result.token);
     return result.payload;
@@ -151,7 +166,8 @@ export class ChatController {
 
   @ApiTags("chat") @ApiCookieAuth("veriasistan_session") @ApiOperation({ summary: "Doğal dildeki soruyu kullanıcıya özel sohbet bağlamıyla cevaplar" })
   @ApiBody({ type: ChatDto }) @ApiResponse({ status: 201, description: "Cevap, SQL, sonuç satırları ve kalıcı mesaj kayıtları" })
-  @Post("chat") ask(@Body() body: ChatDto, @Headers("authorization") authorization?: string, @Headers("cookie") cookie?: string) {
+  @Post("chat") ask(@Body() body: ChatDto, @Ip() ip: string, @Headers("authorization") authorization?: string, @Headers("cookie") cookie?: string) {
+    this.enforceRateLimit("chat", ip);
     return this.chat.ask(body.question, body.history, this.auth(authorization, cookie), body.conversationId);
   }
 }

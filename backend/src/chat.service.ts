@@ -5,7 +5,7 @@ import { join } from "path";
 import { AccessControl, type AccessRole, type AuthHeaders } from "./access-control";
 import { ApplicationStore } from "./application-store";
 import { AuditLogStore } from "./audit-log";
-import { createVerifiedPlan, metricCatalogPrompt, verifiedMetrics } from "./metric-catalog";
+import { createVerifiedPlan, METRIC_CATALOG_VERSION, metricCatalogPrompt, verifiedMetrics } from "./metric-catalog";
 import { createOfflinePlan, QueryPlan, summarizeRows } from "./query-planner";
 
 type McpTextResult = { content?: Array<{ type: string; text?: string }>; isError?: boolean };
@@ -204,7 +204,7 @@ export class ChatService {
   async metrics(headers?: AuthHeaders) {
     const user = await this.access.require(headers, "metrics");
     this.auditLog.record({ user, action: "view_metrics", status: "success", durationMs: 0, rowCount: verifiedMetrics.length });
-    return { metrics: verifiedMetrics, count: verifiedMetrics.length, source: "verified-catalog", updatedAt: "2026-08-14" };
+    return { metrics: verifiedMetrics, count: verifiedMetrics.length, source: "verified-catalog", catalogVersion: METRIC_CATALOG_VERSION, updatedAt: "2026-09-09" };
   }
 
   async insights(headers?: AuthHeaders) {
@@ -332,7 +332,7 @@ export class ChatService {
     return result;
   }
 
-  capabilities() { return { aiMode: process.env.GEMINI_API_KEY ? "gemini" : "offline", offlineTopics: ["stok", "satış", "ciro", "ürün", "kategori", "müşteri", "sipariş", "fiyat"], contextualChat: true, maxContextMessages: 8, automaticSqlRepair: true, maxSqlAttempts: 2, businessInsights: true, insightsUseGemini: false, verifiedMetrics: verifiedMetrics.length, verifiedQueriesUseGemini: false, authentication: "postgres-session-httpOnly-cookie", roleBasedAccess: true, roles: ["viewer", "analyst", "admin"], perUserConversations: true, perUserFavorites: true, persistentAuditLog: true, readOnlyBusinessData: true, maxRows: 50, timeoutMs: 5000 }; }
+  capabilities() { return { aiMode: process.env.GEMINI_API_KEY ? "gemini" : "offline", offlineTopics: ["stok", "satış", "ciro", "ürün", "kategori", "müşteri", "sipariş", "fiyat"], contextualChat: true, maxContextMessages: 8, automaticSqlRepair: true, maxSqlAttempts: 2, businessInsights: true, insightsUseGemini: false, verifiedMetrics: verifiedMetrics.length, metricCatalogVersion: METRIC_CATALOG_VERSION, verifiedQueriesUseGemini: false, authentication: "postgres-session-httpOnly-cookie", roleBasedAccess: true, roles: ["viewer", "analyst", "admin"], perUserConversations: true, perUserFavorites: true, persistentAuditLog: true, readOnlyBusinessData: true, maxRows: 50, timeoutMs: 5000 }; }
 
   async ask(question: string, history: ChatHistoryItem[] = [], headers?: AuthHeaders, conversationId?: string) {
     const started = Date.now();
@@ -355,6 +355,7 @@ export class ChatService {
       const schema = await this.mcpCall<SchemaColumn[]>("get_schema", {});
       let source: "verified" | "gemini" | "offline" = verified ? "verified" : "offline";
       const verifiedMetric: string | undefined = verified?.metricId;
+      const verifiedMetricVersion: string | undefined = verified?.metricVersion;
       let plan: QueryPlan | null = verified?.plan ?? createOfflinePlan(question);
       if (!verified && process.env.GEMINI_API_KEY) {
         try {
@@ -366,9 +367,9 @@ export class ChatService {
       }
       const contextMessages = source === "gemini" ? history.length : 0;
       if (!plan || plan.mode === "unsupported") {
-        const response = { answer: "Bu soruyu mevcut veri şemasıyla cevaplayamıyorum. Ürün, stok, satış, ciro, müşteri veya siparişler hakkında sorabilirsin.", rows: [], source, verifiedMetric, contextMessages, durationMs: Date.now() - started };
-        const assistantMessage = await this.application.appendMessage(user.id, activeConversationId, { role: "assistant", content: response.answer, rows: [], source, verifiedMetric, contextMessages, durationMs: response.durationMs });
-        this.auditLog.record({ user, action: "chat_query", status: "success", durationMs: response.durationMs, question, source, verifiedMetric, rowCount: 0, message: "Şema dışında soru" });
+        const response = { answer: "Bu soruyu mevcut veri şemasıyla cevaplayamıyorum. Ürün, stok, satış, ciro, müşteri veya siparişler hakkında sorabilirsin.", rows: [], source, verifiedMetric, verifiedMetricVersion, contextMessages, durationMs: Date.now() - started };
+        const assistantMessage = await this.application.appendMessage(user.id, activeConversationId, { role: "assistant", content: response.answer, rows: [], source, verifiedMetric, verifiedMetricVersion, contextMessages, durationMs: response.durationMs });
+        this.auditLog.record({ user, action: "chat_query", status: "success", durationMs: response.durationMs, question, source, verifiedMetric, verifiedMetricVersion, rowCount: 0, message: "Şema dışında soru" });
         return { ...response, conversationId: activeConversationId, userMessage, assistantMessage };
       }
       let sqlCorrected = false;
@@ -388,9 +389,9 @@ export class ChatService {
         sqlCorrected = true;
         result = await this.mcpCall<QueryResult>("query_database", { sql: plan.sql });
       }
-      const response = { answer: summarizeRows(plan, result.rows), sql: plan.sql, rows: result.rows, rowCount: result.rowCount, source, verifiedMetric, contextMessages, sqlCorrected, sqlAttempts: sqlCorrected ? 2 : 1, durationMs: Date.now() - started, queryDurationMs: result.durationMs };
-      const assistantMessage = await this.application.appendMessage(user.id, activeConversationId, { role: "assistant", content: response.answer, sql: response.sql, rows: response.rows, source, verifiedMetric, contextMessages, sqlCorrected, durationMs: response.durationMs });
-      this.auditLog.record({ user, action: "chat_query", status: "success", durationMs: response.durationMs, question, source, verifiedMetric, rowCount: result.rowCount, sql: plan.sql });
+      const response = { answer: summarizeRows(plan, result.rows), sql: plan.sql, rows: result.rows, rowCount: result.rowCount, source, verifiedMetric, verifiedMetricVersion, contextMessages, sqlCorrected, sqlAttempts: sqlCorrected ? 2 : 1, durationMs: Date.now() - started, queryDurationMs: result.durationMs };
+      const assistantMessage = await this.application.appendMessage(user.id, activeConversationId, { role: "assistant", content: response.answer, sql: response.sql, rows: response.rows, source, verifiedMetric, verifiedMetricVersion, contextMessages, sqlCorrected, durationMs: response.durationMs });
+      this.auditLog.record({ user, action: "chat_query", status: "success", durationMs: response.durationMs, question, source, verifiedMetric, verifiedMetricVersion, rowCount: result.rowCount, sql: plan.sql });
       return { ...response, conversationId: activeConversationId, userMessage, assistantMessage };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Veri servisine ulaşılamadı";

@@ -18,6 +18,8 @@ VeriAsistan, model tarafından üretilen SQL'i güvenilir kabul etmez. İş veri
 - `search_path`, `pg_catalog, public` ile sınırlandırılır.
 - Statement timeout 5 saniye, sonuç sınırı 50 satırdır.
 - Sorgular ve engellenen işlemler denetim kaydına alınır.
+- Kayıt, giriş ve sohbet uçlarında IP başına kayan pencere rate limit uygulanır (sırasıyla 5/15 dk, 10/15 dk ve 30/dk).
+- Doğrulanmış metrik yanıtları `1.1.0` katalog sürümünü taşır; kalıcı sohbet ve denetim kayıtları da aynı sürüm izini saklar.
 
 ## Bilinen sınırlar
 
@@ -29,8 +31,9 @@ Yeni bir SQL özelliği eklenirken genel bir düğüm veya fonksiyon grubuna izi
 
 ```bash
 npm test
+npm run test:integration
 ```
 
-Bu komut frontend kontrolünü, 7 backend testini ve 22 MCP AST güvenlik testini çalıştırır. Gerçek PostgreSQL/RBAC entegrasyonları için ayrı ve boş bir test veritabanı kullanılarak `npm run test:integration` çalıştırılır. Bu akış; gerçek MCP stdio istemcisi, `chatbot_reader` rolü, izinli/izinsiz tablolar, DML reddi ve gerçek `app_identity` oturum/RBAC davranışını doğrular. GitHub Actions her push ve pull request'te PostgreSQL hizmeti başlatıp geçişleri uygulayarak iki test akışını da otomatik çalıştırır.
+İlk komut frontend kontrolünü, 11 backend statik testini ve 22 MCP AST güvenlik testini çalıştırır. İkinci komut gerçek PostgreSQL/MCP ve kimlik/RBAC entegrasyonlarını ayrı ve boş test veritabanında çalıştırır. Rate limit ve katalog sürümü regresyonları da backend statik testlerine dahildir. GitHub Actions her push ve pull request'te PostgreSQL hizmeti başlatıp dört geçişi uygulayarak iki test akışını da otomatik çalıştırır.
 
-Kök proje, backend ve MCP paketlerinde `npm audit --audit-level=moderate` sonucu 0 açık raporlanır. Güvenli olmayan ana sürüm yükseltmelerini zorlayan `npm audit fix --force` kullanılmaz; güncellemeler gözden geçirilip kilit dosyalarıyla birlikte yapılmalıdır.
+Kök üretim bağımlılıklarında `npm audit --audit-level=moderate --omit=dev` temiz sonuç verir. Backend ve MCP paketlerinde NestJS/multer ve Hono kaynaklı transitive uyarılar görülebilir. `npm audit fix --force` kullanılmaz; kırıcı yükseltmeler ayrı bir bağımlılık bakım çalışmasında gözden geçirilip kilit dosyalarıyla birlikte yapılmalıdır.

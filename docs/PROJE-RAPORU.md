@@ -37,6 +37,7 @@ VeriAsistan, kullanıcıların SQL bilmeden kurumsal satış verilerini Türkçe
 6. MCP sorguyu PostgreSQL AST'sine çevirir ve açık izin listeleriyle doğrular.
 7. Geçerli sorgu `chatbot_reader` kullanıcısıyla read-only transaction içinde çalışır.
 8. En fazla 50 satırlık sonuç, kaynak ve süre bilgisiyle arayüze döner; işlem denetim kaydına yazılır.
+9. Kayıt, giriş ve sohbet uçları IP başına kayan pencere rate limit ile korunur; doğrulanmış plan ve kalıcı kayıtlar katalog sürümünü taşır.
 
 ## Kimlik ve rol modeli
 
@@ -44,7 +45,7 @@ VeriAsistan, kullanıcıların SQL bilmeden kurumsal satış verilerini Türkçe
 
 ## Veritabanı tasarımı
 
-İş verisi `public` şemasındaki `products`, `customers`, `orders` ve `order_items` tablolarında tutulur. Müşteri-sipariş ilişkisi bire-çoktur; sipariş ve ürün arasındaki çoktan-çoğa ilişki `order_items` ile çözülür. Kullanıcı, oturum, sohbet, mesaj ve favori kayıtları ayrı `app_identity` şemasındadır. `chatbot_reader` iş tablolarında yalnız SELECT yetkisine, `app_writer` ise yalnız uygulama şemasında gerekli yazma yetkilerine sahiptir.
+İş verisi `public` şemasındaki `products`, `customers`, `orders` ve `order_items` tablolarında tutulur. Müşteri-sipariş ilişkisi bire-çoktur; sipariş ve ürün arasındaki çoktan-çoğa ilişki `order_items` ile çözülür. Kullanıcı, oturum, sohbet, mesaj ve favori kayıtları ayrı `app_identity` şemasındadır. `chatbot_reader` iş tablolarında yalnız SELECT yetkisine, `app_writer` ise yalnız uygulama şemasında gerekli yazma yetkilerine sahiptir. Mesajlarda kullanılan doğrulanmış metrik katalog sürümü ayrıca saklanır.
 
 ## SQL güvenliği ve risk değerlendirmesi
 
@@ -67,7 +68,7 @@ AST katmanı riski önemli ölçüde azaltır ancak tek savunma değildir. Parse
 `npm test` komutu üç ayrı grubu tek akışta çalıştırır:
 
 - Frontend üretim derlemesi.
-- 7 backend testi: planlayıcı, kullanıcı kimliği, oturum ve rol sınırları.
+- 11 backend statik testi: planlayıcı, kullanıcı kimliği, oturum, rol sınırları, rate limit ve metrik katalog sürümü.
 - 22 MCP güvenlik testi: normal SELECT/CTE/aggregate örnekleri ile çoklu statement, yorum, bilinmeyen tablo, başka şema, DML CTE, `SELECT INTO`, satır kilidi, recursive CTE, sistem/gecikme fonksiyonları, kullanıcı tanımlı fonksiyon, tablo fonksiyonu, tehlikeli cast, kimlik değeri ve bozuk SQL örnekleri.
 
 `npm run test:integration` ayrı bir geçici PostgreSQL ortamında iki gerçek entegrasyon grubunu çalıştırır:
@@ -75,15 +76,17 @@ AST katmanı riski önemli ölçüde azaltır ancak tek savunma değildir. Parse
 - MCP/PostgreSQL: gerçek MCP stdio istemcisiyle dört izinli tablonun okunması; yetkisiz tablo/şema, çoklu statement ve veri değiştiren CTE'nin AST tarafından reddedilmesi; doğrudan `chatbot_reader` bağlantısında yetkisiz tablo ve `INSERT` işleminin PostgreSQL izinleriyle reddedilmesi.
 - Kimlik/RBAC: gerçek `app_identity` tablolarında ilk kayıt yönetici, sonraki kayıt görüntüleyici olur; görüntüleyicinin `free_chat` yetkisi engellenir, doğrulanmış metrik yetkisi kabul edilir ve yönetici kullanıcı yönetimi yetkisine erişir.
 
-Entegrasyon testleri yalnızca boş ve geçici bir veritabanında çalışacak şekilde tasarlanmıştır. `.github/workflows/ci.yml`, her `main` push'u ve pull request'te PostgreSQL hizmeti başlatır, üç geçiş dosyasını uygular, önce `npm test` sonra `npm run test:integration` çalıştırır. Böylece testlerin yalnızca kaynak kodda bulunması değil, gerçek parser + MCP + PostgreSQL + oturum/RBAC sınırlarında çalıştırılması da GitHub Actions geçmişinde görülebilir. `docs/TEST-SENARYOLARI.md` içindeki arayüz kabul senaryoları ayrıca manuel olarak işaretlenmiştir; otomatik test sayısına dahil değildir.
+Entegrasyon testleri yalnızca boş ve geçici bir veritabanında çalışacak şekilde tasarlanmıştır. `.github/workflows/ci.yml`, her `main` push'u ve pull request'te PostgreSQL hizmeti başlatır, dört geçiş dosyasını uygular, önce `npm test` sonra `npm run test:integration` çalıştırır. Böylece testlerin yalnızca kaynak kodda bulunması değil, gerçek parser + MCP + PostgreSQL + oturum/RBAC sınırlarında çalıştırılması da GitHub Actions geçmişinde görülebilir. `docs/TEST-SENARYOLARI.md` içindeki arayüz kabul senaryoları ayrıca manuel olarak işaretlenmiştir; otomatik test sayısına dahil değildir.
 
-Üç paket alanında `npm audit --audit-level=moderate` sonucu 0 güvenlik açığıdır. Ana sürüm zorlayan `npm audit fix --force` uygulanmamış, bağımlılık sürümleri kilit dosyalarıyla korunmuştur.
+Kök üretim bağımlılıklarında `npm audit --audit-level=moderate --omit=dev` temiz sonuç verir; backend ve MCP paketlerinde NestJS/multer ve Hono kaynaklı transitive uyarılar görülebilir. Kırıcı ana sürüm yükseltmesi yaratabileceği için `npm audit fix --force` uygulanmamış, bağımlılık yükseltmeleri ayrı bir bakım çalışmasına bırakılmıştır.
 
 ## Sınırlılıklar ve gelecek çalışmalar
 
 - E-posta doğrulama, parola sıfırlama ve kurumsal SSO henüz yoktur.
 - AST izin listesi bilinmeyen fakat güvenli bir SQL yapısını da reddedebilir; politika bilinçli olarak fail-closed tasarlanmıştır.
-- Sohbet istekleri için merkezi rate limit ve dağıtık oturum deposu eklenebilir.
+- Süreç içi rate limit üretimde merkezi Redis veya ağ geçidine taşınabilir.
+- Kurumsal SSO/MFA, merkezi denetim deposu ve gözlemleme altyapısı eklenebilir.
+- Metrik kataloğu sürümleme temeli atılmıştır; ileride geriye dönük sürüm uyumluluğu ve onay akışı eklenebilir.
 - Model doğruluğu, gecikme ve maliyet metrikleri daha uzun süreli veriyle ölçülebilir.
 - Üretimde TLS, secret manager, yönetilen PostgreSQL ve merkezi gözlemleme kullanılmalıdır.
 

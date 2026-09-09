@@ -23,6 +23,7 @@ export type StoredMessage = {
   rows?: Record<string, unknown>[];
   source?: "verified" | "gemini" | "offline";
   verifiedMetric?: string;
+  verifiedMetricVersion?: string;
   contextMessages?: number;
   sqlCorrected?: boolean;
   durationMs?: number;
@@ -102,11 +103,18 @@ export class ApplicationStore {
 
   async ready() {
     try {
-      const result = await this.pool().query("SELECT to_regclass('app_identity.users') AS users_table");
-      if (!result.rows[0]?.users_table) throw new Error("migration missing");
+      const result = await this.pool().query(`
+        SELECT to_regclass('app_identity.users') AS users_table,
+               EXISTS (
+                 SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'app_identity'
+                   AND table_name = 'messages'
+                   AND column_name = 'verified_metric_version'
+               ) AS metric_version_column`);
+      if (!result.rows[0]?.users_table || !result.rows[0]?.metric_version_column) throw new Error("migration missing");
     } catch (error) {
       if (error instanceof ServiceUnavailableException) throw error;
-      throw new ServiceUnavailableException("Üyelik tabloları hazır değil. database/002-identity-and-user-data.sql geçişini çalıştır.");
+      throw new ServiceUnavailableException("Üyelik tabloları güncel değil. database/002-identity-and-user-data.sql ve database/004-metric-version.sql geçişlerini çalıştır.");
     }
   }
 
@@ -267,7 +275,7 @@ export class ApplicationStore {
     if (conversations.rows.length === 0) return [];
     const ids = conversations.rows.map((row) => row.id);
     const messages = await this.pool().query(
-      `SELECT id, conversation_id, role, content, sql, result_rows, source, verified_metric,
+      `SELECT id, conversation_id, role, content, sql, result_rows, source, verified_metric, verified_metric_version,
               context_messages, sql_corrected, duration_ms, created_at
        FROM app_identity.messages WHERE conversation_id = ANY($1::uuid[])
        ORDER BY created_at ASC`,
@@ -328,11 +336,11 @@ export class ApplicationStore {
     const id = randomUUID();
     const result = await this.pool().query(
       `INSERT INTO app_identity.messages
-        (id, conversation_id, role, content, sql, result_rows, source, verified_metric, context_messages, sql_corrected, duration_ms)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11)
-       RETURNING id, role, content, sql, result_rows, source, verified_metric, context_messages, sql_corrected, duration_ms, created_at`,
+        (id, conversation_id, role, content, sql, result_rows, source, verified_metric, verified_metric_version, context_messages, sql_corrected, duration_ms)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12)
+       RETURNING id, role, content, sql, result_rows, source, verified_metric, verified_metric_version, context_messages, sql_corrected, duration_ms, created_at`,
       [id, conversationId, message.role, message.content, message.sql ?? null, JSON.stringify(message.rows ?? []), message.source ?? null,
-        message.verifiedMetric ?? null, message.contextMessages ?? 0, message.sqlCorrected ?? false, message.durationMs ?? null],
+        message.verifiedMetric ?? null, message.verifiedMetricVersion ?? null, message.contextMessages ?? 0, message.sqlCorrected ?? false, message.durationMs ?? null],
     );
     if (message.role === "user") {
       const title = message.content.trim().length > 38 ? `${message.content.trim().slice(0, 38)}…` : message.content.trim();
@@ -393,6 +401,7 @@ export class ApplicationStore {
       rows: Array.isArray(row.result_rows) ? row.result_rows : [],
       source: row.source ?? undefined,
       verifiedMetric: row.verified_metric ?? undefined,
+      verifiedMetricVersion: row.verified_metric_version ?? undefined,
       contextMessages: Number(row.context_messages ?? 0),
       sqlCorrected: Boolean(row.sql_corrected),
       durationMs: row.duration_ms === null || row.duration_ms === undefined ? undefined : Number(row.duration_ms),

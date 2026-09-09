@@ -1,5 +1,7 @@
 import type { QueryPlan } from "./query-planner";
 
+export const METRIC_CATALOG_VERSION = "1.1.0";
+
 export type VerifiedMetricDefinition = {
   id: string;
   name: string;
@@ -83,7 +85,7 @@ export const verifiedMetrics: VerifiedMetricDefinition[] = [
   },
 ];
 
-type VerifiedMatch = { metricId: string; plan: QueryPlan };
+type VerifiedMatch = { metricId: string; metricVersion: string; plan: QueryPlan };
 type MetricRule = { metricId: string; matches: (question: string) => boolean; build: (question: string) => QueryPlan };
 const query = (sql: string, answerTitle: string, explanation: string): QueryPlan => ({ mode: "query", sql, answerTitle, explanation });
 const normalized = (question: string) => question.toLocaleLowerCase("tr-TR").replace(/[?!.,]/g, " ").replace(/\s+/g, " ").trim();
@@ -145,10 +147,9 @@ const rules: MetricRule[] = [
 export function createVerifiedPlan(question: string): VerifiedMatch | null {
   const q = normalized(question);
   const rule = rules.find((candidate) => candidate.matches(q));
-  return rule ? { metricId: rule.metricId, plan: rule.build(q) } : null;
+  return rule ? { metricId: rule.metricId, metricVersion: METRIC_CATALOG_VERSION, plan: rule.build(q) } : null;
 }
 
 export function metricCatalogPrompt() {
-  return JSON.stringify(verifiedMetrics.map(({ id, name, description, formula, synonyms }) => ({ id, name, description, formula, synonyms })));
+  return JSON.stringify({ catalogVersion: METRIC_CATALOG_VERSION, metrics: verifiedMetrics.map(({ id, name, description, formula, synonyms }) => ({ id, name, description, formula, synonyms })) });
 }
-

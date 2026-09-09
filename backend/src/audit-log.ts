@@ -15,6 +15,7 @@ export type AuditEntry = {
   question?: string;
   source?: "verified" | "gemini" | "offline";
   verifiedMetric?: string;
+  verifiedMetricVersion?: string;
   rowCount?: number;
   sql?: string;
   message?: string;

@@ -21,7 +21,7 @@ Gemini yalnızca SQL planı üretir; veritabanına bağlanmaz. NestJS de SQL'i d
 | Katman | Sorumluluk |
 | --- | --- |
 | React + TypeScript | Soruyu alma, bağlantı durumunu gösterme, kullanıcıya özel sohbet/favori akışı, KPI/grafik/tablo üretme, CSV indirme ve SQL kopyalama |
-| NestJS | Kimlik ve oturum, RBAC, doğrulanmış metrikler, Gemini isteği, çevrimdışı planlayıcı, MCP istemciliği, denetim kaydı ve Swagger |
+| NestJS | Kimlik ve oturum, RBAC, IP rate limit, doğrulanmış metrik sürümleme, Gemini isteği, çevrimdışı planlayıcı, MCP istemciliği, denetim kaydı ve Swagger |
 | Gemini 3.1 Flash-Lite | Doğal dil sorusunu verilen şemaya uygun yapılandırılmış SQL planına dönüştürme |
 | MCP sunucusu | Araç sözleşmesi, PostgreSQL AST/izin listesi doğrulaması, sorgu sınırları ve salt-okunur iş verisi erişimi |
 | PostgreSQL | İş tabloları ile ayrı `app_identity` kullanıcı/oturum/sohbet şemasını saklama |
@@ -66,6 +66,8 @@ flowchart TD
 5. `SELECT INTO`, DML içeren CTE, recursive CTE, tablo fonksiyonu, başka şema, sistem kataloğu ve satır kilidi fail-closed reddedilir.
 6. PostgreSQL bağlantısı yalnızca `SELECT` yetkili `chatbot_reader` kullanıcısıyla kurulur ve `search_path` sabitlenir.
 7. Sorgu read-only transaction içinde, 5 saniye zaman aşımıyla çalışır ve sonuç 50 satırla sınırlandırılır.
+8. Kayıt, giriş ve sohbet uçları IP başına kayan pencereyle sınırlandırılır; dağıtık üretimde merkezi bir rate-limit deposu kullanılmalıdır.
+9. Doğrulanmış katalog `1.1.0` sürümünü plan, API, sohbet mesajı ve denetim kaydı boyunca taşır.
 
 Önceki regex/blacklist yaklaşımında öngörülmeyen bir SQL kalıbının uygulama filtresini aşma riski bulunuyordu. Güncel sürüm bu riski yapısal AST doğrulamasıyla azaltır. Veritabanı rolü ve read-only transaction, AST katmanından bağımsız ikinci savunma hattı olarak korunur.
 
