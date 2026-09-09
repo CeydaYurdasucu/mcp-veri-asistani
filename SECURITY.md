@@ -31,4 +31,6 @@ Yeni bir SQL özelliği eklenirken genel bir düğüm veya fonksiyon grubuna izi
 npm test
 ```
 
-Bu komut frontend kontrolünü, 7 backend testini ve 22 MCP AST güvenlik testini çalıştırır. Aynı akış GitHub Actions üzerinde her push ve pull request için tekrar edilir.
+Bu komut frontend kontrolünü, 7 backend testini ve 22 MCP AST güvenlik testini çalıştırır. Gerçek PostgreSQL/RBAC entegrasyonları için ayrı ve boş bir test veritabanı kullanılarak `npm run test:integration` çalıştırılır. Bu akış; gerçek MCP stdio istemcisi, `chatbot_reader` rolü, izinli/izinsiz tablolar, DML reddi ve gerçek `app_identity` oturum/RBAC davranışını doğrular. GitHub Actions her push ve pull request'te PostgreSQL hizmeti başlatıp geçişleri uygulayarak iki test akışını da otomatik çalıştırır.
+
+Kök proje, backend ve MCP paketlerinde `npm audit --audit-level=moderate` sonucu 0 açık raporlanır. Güvenli olmayan ana sürüm yükseltmelerini zorlayan `npm audit fix --force` kullanılmaz; güncellemeler gözden geçirilip kilit dosyalarıyla birlikte yapılmalıdır.

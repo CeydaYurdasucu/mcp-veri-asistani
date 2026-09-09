@@ -13,6 +13,20 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: salesdb
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d salesdb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - name: Kaynak kodu al
         uses: actions/checkout@v5
@@ -33,5 +47,23 @@ jobs:
           npm ci --prefix backend
           npm ci --prefix mcp-server
 
+      - name: Entegrasyon veritabanını hazırla
+        env:
+          PGPASSWORD: app
+        run: |
+          POSTGRES_CONTAINER="$(docker ps --filter 'name=postgres' --format '{{.ID}}' | head -n 1)"
+          test -n "$POSTGRES_CONTAINER"
+          docker exec -i "$POSTGRES_CONTAINER" psql -U app -d salesdb < database/init.sql
+          docker exec -i "$POSTGRES_CONTAINER" psql -U app -d salesdb < database/002-identity-and-user-data.sql
+          docker exec -i "$POSTGRES_CONTAINER" psql -U app -d salesdb < database/003-reader-grants.sql
+
       - name: Tüm derleme ve testleri çalıştır
         run: npm test
+
+      - name: Gerçek PostgreSQL ve RBAC entegrasyon testleri
+        env:
+          APP_DATABASE_URL: postgresql://app_writer:appwriterpass@localhost:5432/salesdb
+          INTEGRATION_APP_DATABASE_URL: postgresql://app_writer:appwriterpass@localhost:5432/salesdb
+          INTEGRATION_DATABASE_URL: postgresql://chatbot_reader:readerpass@localhost:5432/salesdb
+          INTEGRATION_ADMIN_DATABASE_URL: postgresql://app:app@localhost:5432/salesdb
+        run: npm run test:integration

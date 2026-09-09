@@ -70,7 +70,14 @@ AST katmanı riski önemli ölçüde azaltır ancak tek savunma değildir. Parse
 - 7 backend testi: planlayıcı, kullanıcı kimliği, oturum ve rol sınırları.
 - 22 MCP güvenlik testi: normal SELECT/CTE/aggregate örnekleri ile çoklu statement, yorum, bilinmeyen tablo, başka şema, DML CTE, `SELECT INTO`, satır kilidi, recursive CTE, sistem/gecikme fonksiyonları, kullanıcı tanımlı fonksiyon, tablo fonksiyonu, tehlikeli cast, kimlik değeri ve bozuk SQL örnekleri.
 
-`.github/workflows/ci.yml`, aynı komutu her `main` push'u ve pull request için temiz Ubuntu/Node.js 22 ortamında çalıştırır. Böylece testlerin yalnızca kaynak kodda bulunması değil, gerçekten çalıştırılması da GitHub Actions geçmişinde görülebilir. `docs/TEST-SENARYOLARI.md` içindeki arayüz ve canlı veritabanı senaryoları manueldir; otomatik test sayısı gibi sunulmaz.
+`npm run test:integration` ayrı bir geçici PostgreSQL ortamında iki gerçek entegrasyon grubunu çalıştırır:
+
+- MCP/PostgreSQL: gerçek MCP stdio istemcisiyle dört izinli tablonun okunması; yetkisiz tablo/şema, çoklu statement ve veri değiştiren CTE'nin AST tarafından reddedilmesi; doğrudan `chatbot_reader` bağlantısında yetkisiz tablo ve `INSERT` işleminin PostgreSQL izinleriyle reddedilmesi.
+- Kimlik/RBAC: gerçek `app_identity` tablolarında ilk kayıt yönetici, sonraki kayıt görüntüleyici olur; görüntüleyicinin `free_chat` yetkisi engellenir, doğrulanmış metrik yetkisi kabul edilir ve yönetici kullanıcı yönetimi yetkisine erişir.
+
+Entegrasyon testleri yalnızca boş ve geçici bir veritabanında çalışacak şekilde tasarlanmıştır. `.github/workflows/ci.yml`, her `main` push'u ve pull request'te PostgreSQL hizmeti başlatır, üç geçiş dosyasını uygular, önce `npm test` sonra `npm run test:integration` çalıştırır. Böylece testlerin yalnızca kaynak kodda bulunması değil, gerçek parser + MCP + PostgreSQL + oturum/RBAC sınırlarında çalıştırılması da GitHub Actions geçmişinde görülebilir. `docs/TEST-SENARYOLARI.md` içindeki arayüz kabul senaryoları ayrıca manuel olarak işaretlenmiştir; otomatik test sayısına dahil değildir.
+
+Üç paket alanında `npm audit --audit-level=moderate` sonucu 0 güvenlik açığıdır. Ana sürüm zorlayan `npm audit fix --force` uygulanmamış, bağımlılık sürümleri kilit dosyalarıyla korunmuştur.
 
 ## Sınırlılıklar ve gelecek çalışmalar
 
@@ -82,4 +89,4 @@ AST katmanı riski önemli ölçüde azaltır ancak tek savunma değildir. Parse
 
 ## Sonuç
 
-VeriAsistan; doğal dil analizi, doğrulanmış kurumsal metrikler, MCP araç sınırı, gerçek kimlik/rol yönetimi ve denetim kaydını tek bir prototipte birleştirir. Güvenlik geri bildirimi sonrasında regex tabanlı doğrulama kaldırılmış, yapısal PostgreSQL AST ve açık izin listesi uygulanmış, saldırı testleri genişletilmiş ve CI kanıtı eklenmiştir. Böylece proje yalnız çalışan bir demo olmaktan çıkarak güvenlik tercihlerini, sınırlarını ve kalan riskleri açıkça belgeleyen daha denetlenebilir bir mühendislik çalışmasına dönüşmüştür.
+VeriAsistan; doğal dil analizi, doğrulanmış kurumsal metrikler, MCP araç sınırı, gerçek kimlik/rol yönetimi ve denetim kaydını tek bir prototipte birleştirir. Güvenlik geri bildirimi sonrasında regex tabanlı doğrulama kaldırılmış, yapısal PostgreSQL AST ve açık izin listesi uygulanmış, AST saldırı testleri gerçek MCP/PostgreSQL yetki testleriyle tamamlanmış, kimlik/RBAC entegrasyonları otomatikleştirilmiş ve CI kanıtı eklenmiştir. Böylece proje yalnız çalışan bir demo olmaktan çıkarak güvenlik tercihlerini, sınırlarını ve kalan riskleri açıkça belgeleyen daha denetlenebilir bir mühendislik çalışmasına dönüşmüştür.

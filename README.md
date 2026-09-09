@@ -135,7 +135,7 @@ Tehdit modeli ve kalan riskler: [`SECURITY.md`](SECURITY.md)
 
 ## Testler
 
-Tüm frontend, backend ve MCP kontrolleri tek komutla çalışır:
+Frontend, backend ve MCP statik güvenlik kontrolleri tek komutla çalışır:
 
 ```powershell
 npm test
@@ -146,6 +146,19 @@ Test grupları:
 - Frontend üretim derlemesi.
 - Backend planlayıcı, oturum ve rol sınırı testleri.
 - 22 MCP güvenlik testi: normal SELECT/CTE/aggregate senaryoları ile çoklu statement, DML CTE, `SELECT INTO`, kilitleme, recursive CTE, sistem şeması, bilinmeyen tablo/fonksiyon, tablo fonksiyonu, tehlikeli cast ve bozuk SQL saldırı örnekleri.
+
+Gerçek PostgreSQL entegrasyon testleri, Docker üzerinde geçici bir veritabanıyla ayrıca çalıştırılır:
+
+```powershell
+docker compose up -d postgres
+# database/init.sql, database/002-identity-and-user-data.sql ve
+# database/003-reader-grants.sql geçişlerini uyguladıktan sonra:
+npm run test:integration
+```
+
+Bu akış; MCP istemcisinin gerçek `chatbot_reader` rolüyle dört izinli tabloyu okuyabildiğini, yetkisiz tablo/şema ve DML sorgularının MCP + PostgreSQL tarafından reddedildiğini, ayrıca gerçek oturumlarla ilk hesabın yönetici ve sonraki hesabın görüntüleyici olduğunu doğrular. Entegrasyon testi güvenlik nedeniyle yalnızca boş ve geçici `app_identity` veritabanında çalışır. GitHub Actions her push ve pull request'te PostgreSQL hizmeti başlatır, geçişleri uygular ve bu testi otomatik çalıştırır.
+
+Güncel üç paket alanında `npm audit --audit-level=moderate` sonucu 0 güvenlik açığıdır. `npm audit fix --force` gibi ana sürüm yükseltmeleri uygulanmamış; bağımlılıklar kilit dosyalarıyla tekrarlanabilir tutulmuştur.
 
 Her `main` push'u ve pull request için aynı komut `.github/workflows/ci.yml` tarafından çalıştırılır. Manuel kabul senaryoları: [`docs/TEST-SENARYOLARI.md`](docs/TEST-SENARYOLARI.md)
 

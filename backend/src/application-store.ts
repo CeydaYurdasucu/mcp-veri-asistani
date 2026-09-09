@@ -38,7 +38,11 @@ export type StoredConversation = {
 };
 
 export type StoredFavorite = { id: string; question: string; createdAt: string };
-type PoolLike = { query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }>; connect: () => Promise<ClientLike> };
+type PoolLike = {
+  query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }>;
+  connect: () => Promise<ClientLike>;
+  end?: () => Promise<void>;
+};
 type ClientLike = { query: PoolLike["query"]; release: () => void };
 
 function normalizeEmail(email: string) {
@@ -74,6 +78,12 @@ export async function verifyPassword(password: string, stored: string) {
 @Injectable()
 export class ApplicationStore {
   private database?: PoolLike;
+
+  async close() {
+    const database = this.database;
+    this.database = undefined;
+    await database?.end?.();
+  }
 
   private pool(): PoolLike {
     if (this.database) return this.database;

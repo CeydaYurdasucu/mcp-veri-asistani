@@ -18,7 +18,8 @@
     "test:backend": "npm test --prefix backend",
     "test:mcp": "npm test --prefix mcp-server",
     "validate:artifact": "bash scripts/validate-artifact.sh",
-    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern backend/dist --ignore-pattern mcp-server/dist"
+    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern backend/dist --ignore-pattern mcp-server/dist",
+    "test:integration": "npm run test:integration --prefix backend && npm run test:integration --prefix mcp-server"
   },
   "dependencies": {
     "next": "16.3.4",
